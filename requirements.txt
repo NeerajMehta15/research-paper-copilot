@@ -1,0 +1,13 @@
+streamlit
+sentence-transformers
+chromadb
+openai
+python-dotenv
+pandas
+numpy
+langchain-community
+docx
+streamlit
+PyPDF2
+python-docx
+pypdf
