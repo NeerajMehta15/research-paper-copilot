@@ -1,0 +1,36 @@
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+.eggs/
+.env
+.venv
+.env.local
+.venv.local
+
+# Build / dist / cache
+dist/
+build/
+.cache/
+*.log
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage / test
+.coverage
+coverage/
+.pytest_cache/
+
+# Misc
+*.tmp
+*.bak
+*.lock
