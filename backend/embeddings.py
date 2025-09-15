@@ -23,12 +23,8 @@ class EmbeddingManager:
     
     def store_chunks(self, chunks, doc_metadata):
         """Store chunks with embeddings and metadata in vector database"""
-        
-        #Initializing ChromaDB client
-        client = chromadb.PersistentClient(path= self.vector_store)
-        
         #Generating a collection with the help of ChormaDB
-        self.collection = client.get_or_create_collection(
+        self.collection = self.client.get_or_create_collection(
             name = "ai_research_paper",
             metadata= {"description":"AI White paper documents"}
         )
@@ -69,7 +65,7 @@ class EmbeddingManager:
         doc_metadata = processed_document['metadata']
         
         # Generate document ID
-        doc_id = f"doc_{doc_metadata['filename']}_{int(time.time())}"
+        doc_id = _generate_doc_id(doc_metadata['filename'])
         
         # Chunk the content using your smart_chunking function
         chunks = smart_chunking(content)
@@ -118,27 +114,52 @@ class EmbeddingManager:
         return sorted(filtered_results, key=lambda x: x['similarity'], reverse=True)
             
         
-    def get_chunk_by_id(self, chunk_id: str) -> Optional[Dict]:
+    def get_chunk_by_id(self, chunk_id):
         """Retrieve specific chunk by ID"""
-        pass
+        try:
+            temorary_ = self.collection.get(ids=[chunk_id],
+                                        include=['documents', 'metadatas', 'embeddings'])
+            return temorary_
+        except Exception as e:
+            print(f"Error retrieving chunk {chunk_id}: {e}")
     
-    def delete_document(self, doc_id: str) -> bool:
+    def delete_document(self, doc_id):
         """Delete all chunks belonging to a document"""
-        pass
+        try: 
+            self.collection.delete(where={"doc_id": doc_id})
+            print(f"Document {doc_id} and its chunks deleted.")
+        except Exception as e:
+            print(f"Error deleting document {doc_id}: {e}")
+        return
     
-    def list_documents(self) -> List[Dict]:
+    def list_documents(self, limit = 100) -> List[Dict]:
         """List all stored documents with basic info"""
-        pass
+        try:
+            collection_info = self.client.list_collections()
+            return collection_info
+        except Exception as e:
+            print(f"Error listing documents: {e}")
+            return []
+        
 
 # Utility functions
-def _prepare_chunk_metadata(chunk: Dict, doc_metadata: Dict, chunk_index: int) -> Dict:
+def _prepare_chunk_metadata(chunk, doc_metadata, chunk_index) -> Dict:
     """Prepare metadata for storing with embeddings"""
     pass
+    
 
-def _generate_chunk_id(doc_id: str, chunk_index: int) -> str:
+def _generate_chunk_id(doc_id, chunk_index):
     """Generate unique chunk ID"""
-    pass
+    try:
+        return f"{doc_id}_chunk_{chunk_index}"
+    except Exception as e:
+        print(f"Error generating chunk ID: {e}")
+        return None
 
-def _generate_doc_id(file_path: str) -> str:
+def _generate_doc_id(file_path):
     """Generate unique document ID"""
-    pass
+    from pathlib import Path
+    filename = Path(file_path).stem
+    unique_doc_id = f"doc_{file_path}_{int(time.time())}"
+    return unique_doc_id
+    
