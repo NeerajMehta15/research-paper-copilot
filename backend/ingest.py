@@ -27,46 +27,56 @@ def process_file(file_path):
 
 def _extract_pdf(file_path):
     """Extracting details from the pdf file format including the metadata"""
+    pages_data = extract_text_with_pages(file_path)
+    meta_data = extract_pdf_metadata(file_path)
+    
+    # Chunk with page metadata preserved
+    chunks = chunk_pages_with_metadata(pages_data, meta_data)
+    
+    return {'content': chunks, 'metadata': meta_data}
+
+
+def extract_text_with_pages(file_path: str):
+    """Extract text preserving page boundaries"""
     path = Path(file_path)
+    content = []
     
     try:
         with open(file_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
-            content = ""
             for page_num, page in enumerate(pdf_reader.pages):
                 page_text = page.extract_text()
-                content += f"\n-------- Page {page_num+1} --------\n{page_text}"
-                
-        file_stats = path.stat()
-        
-        return {
-            'content': content,
-            'metadata': {
-                'filename': path.name,
-                'file_size': file_stats.st_size,
-                'file_type': path.suffix.lower(),
-                'character_count': len(content),
-                'page_count': len(pdf_reader.pages)
-            }
-        }
+                content.append({'page_number': page_num+1,
+                                'text': page_text})
+        return content
     except Exception as e:
         raise Exception(f"Error processing PDF {file_path}: {str(e)}")
-    
+
 
 def extract_pdf_metadata(file_path):
     """Extract document-level metadata"""
-    # PDF properties + content analysis for title/authors
-    pass
-
-def extract_text_with_pages(file_path: str):
-    """Extract text preserving page boundaries"""
-    # Critical for accurate page citations
-    pass
-
-def detect_section_type(text):
-    """Classify text sections (intro, methods, etc.)"""
-    # Use regex patterns to identify section headers
-    pass
+    path = Path(file_path)
+    
+    try:
+        file_stats = path.stat()
+        pdf_reader = PyPDF2.PdfReader(file_path)
+        
+        # Safely extract PDF metadata with fallbacks
+        pdf_metadata = pdf_reader.metadata or {}
+        
+        return {
+            'filename': path.name,
+            'file_size': file_stats.st_size,
+            'file_type': path.suffix.lower(),
+            'page_count': len(pdf_reader.pages),
+            'file_title': pdf_metadata.get('title', '') or '',
+            'author': pdf_metadata.get('author', '') or '',
+            'subject': pdf_metadata.get('subject', '') or '',
+            'creator': pdf_metadata.get('creator', '') or '',
+            'creation_date': pdf_metadata.get('creation_date', '') or ''
+        }
+    except Exception as e:
+        raise Exception(f"Error extracting metadata from {file_path}: {str(e)}")
 
 
 def smart_chunking(text, target_size=150, overlap_size=30):
@@ -77,7 +87,6 @@ def smart_chunking(text, target_size=150, overlap_size=30):
     current_chunk = ""
     
     for sentence in sentences:
-        
         if current_chunk:
             potential_chunk = current_chunk + " " + sentence
         else:
@@ -114,17 +123,30 @@ def smart_chunking(text, target_size=150, overlap_size=30):
     return chunks
 
 
+def chunk_pages_with_metadata(pages_data, doc_metadata, target_size=150, overlap_size=30):
+    """Chunk pages while preserving page numbers"""
+    all_chunks = []
+    
+    for page in pages_data:
+        # Using smart chunking
+        page_chunks = smart_chunking(page['text'], target_size, overlap_size)
+        
+        # Add page number and document info to each chunk
+        for chunk in page_chunks:
+            chunk['page_number'] = page['page_number']
+            chunk['doc_id'] = doc_metadata['filename']
+            all_chunks.append(chunk)
+    
+    return all_chunks
+
+
 def _extract_docx(file_path):
     """Extract content from DOCX file"""
     path = Path(file_path)
 
     try:
         doc = DocxDocument(file_path)
-
-        # Extract text from all paragraphs
         content = "\n".join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
-
-        # Extract metadata
         file_stats = path.stat()
 
         return {
@@ -147,7 +169,6 @@ def _extract_text(file_path: str) -> Dict[str, Any]:
     path = Path(file_path)
     
     try:
-        # Access file
         with open(file_path, 'r', encoding='utf-8') as file:
             content = file.read()
         
@@ -164,5 +185,3 @@ def _extract_text(file_path: str) -> Dict[str, Any]:
         }
     except Exception as e:
         raise Exception(f"Error processing text file {file_path}: {str(e)}")
-    
-#Test
