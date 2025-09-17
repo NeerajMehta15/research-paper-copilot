@@ -40,3 +40,4 @@ coverage/
 
 #Config file
 .conf
+backedn/config.py
