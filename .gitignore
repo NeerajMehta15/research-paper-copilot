@@ -37,3 +37,6 @@ coverage/
 *.tmp
 *.bak
 *.lock
+
+#Config file
+.conf
