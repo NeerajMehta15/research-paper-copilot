@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from backend.ingest import process_file
 from backend.embeddings import EmbeddingManager
-from backend.rag_pipeline import answer_question_with_citations
+from backend.rag_pipelines import answer_question_with_citations
 
 # Page configuration
 st.set_page_config(
