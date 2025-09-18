@@ -1,180 +1,187 @@
+# app.py
 import streamlit as st
+import tempfile
+import os
+from pathlib import Path
+from backend.ingest import process_file
+from backend.embeddings import EmbeddingManager
+from backend.rag_pipeline import answer_question_with_citations
 
-# ---------- Page Config ----------
-st.set_page_config(page_title="Research Paper Copilot", layout="wide")
+# Page configuration
+st.set_page_config(
+    page_title="Research Paper Copilot",
+    page_icon="📄",
+    layout="wide"
+)
 
-# ---------- Custom CSS ----------
-st.markdown("""
-<style>
-body {
-    background-color: #fafafa;
-}
-.section-header {
-    font-size: 1.2rem !important;
-    margin-top: 1.5rem;
-    border-bottom: 1px solid #ddd;
-    padding-bottom: 0.3rem;
-}
-.paper-card {
-    background: white;
-    padding: 0.7rem 1rem;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    margin-bottom: 0.6rem;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-}
-.recent-chip button {
-    border-radius: 16px !important;
-    background-color: #f0f0f0 !important;
-    border: none !important;
-    color: #333 !important;
-    padding: 0.3rem 0.8rem !important;
-    margin: 0.2rem !important;
-    font-size: 0.85rem !important;
-}
-.recent-chip button:hover {
-    background-color: #e0e0e0 !important;
-}
-.mode-badge {
-    display: inline-block;
-    background: #e3edfa;
-    color: #1a4a8d;
-    padding: 0.2rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    margin-bottom: 0.5rem;
-}
-.empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: #555;
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("📄 Research Paper Copilot")
+st.markdown("Upload research papers and ask questions with accurate citations!")
 
-# ---------- Session State ----------
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "recent_questions" not in st.session_state:
-    st.session_state.recent_questions = []
-if "papers" not in st.session_state:
-    st.session_state.papers = []  # store mock info like {"title":..., "abstract":..., "pages":...}
+# Initialize session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = []
+if "embedding_manager" not in st.session_state:
+    st.session_state.embedding_manager = EmbeddingManager()
 
-# ---------- Sidebar ----------
+# Sidebar for file upload and settings
 with st.sidebar:
-    st.title("📚 Research Paper Copilot")
-    st.caption("Upload papers or explore from our sample collection.")
-
-    uploaded_pdfs = st.file_uploader(
-        "Upload Research Papers",
-        type=["pdf"],
-        accept_multiple_files=True
+    st.header("📤 Upload Papers")
+    
+    uploaded_files = st.file_uploader(
+        "Choose PDF files", 
+        type="pdf", 
+        accept_multiple_files=True,
+        help="Upload research papers, reports, or any PDF documents"
     )
-
-    # Mock adding them to library
-    if uploaded_pdfs:
-        for pdf in uploaded_pdfs:
-            st.session_state.papers.append({
-                "title": pdf.name.replace(".pdf",""),
-                "pages": 12,
-                "abstract": "Lorem ipsum abstract placeholder for this uploaded paper."
-            })
-
-    st.markdown("<div class='section-header'>Common Papers</div>", unsafe_allow_html=True)
-    common_papers = [
-        "Attention Is All You Need",
-        "BERT: Pre-training of Deep Bidirectional Transformers",
-        "Large Language Models are Zero-Shot Learners"
-    ]
-    selected_common = st.multiselect("Select demo papers", common_papers)
-    for paper in selected_common:
-        if paper not in [p["title"] for p in st.session_state.papers]:
-            st.session_state.papers.append({
-                "title": paper,
-                "pages": 8,
-                "abstract": "This is a sample abstract for the demo paper."
-            })
-
-    st.markdown("<div class='section-header'>Mode</div>", unsafe_allow_html=True)
-    mode = st.radio("", ["Normal Q&A", "Compare Papers", "Simplify Explanation"])
-
-# ---------- Main Layout ----------
-left, right = st.columns([2, 1], gap="large")
-
-# ---------- Chat Section ----------
-with left:
-    st.title("💬 Chat with Your Papers")
-
-    # Mode badge
-    st.markdown(f"<span class='mode-badge'>Mode: {mode}</span>", unsafe_allow_html=True)
-
-    # Empty state if no papers
-    if not st.session_state.papers:
-        st.markdown("""
-        <div class='empty-state'>
-            <h3>📥 Get Started</h3>
-            <p>Upload your research PDFs from the sidebar or select from our demo papers.</p>
-            <p>Then, start asking questions like:</p>
-            <ul>
-                <li>What is the main contribution of this paper?</li>
-                <li>Summarize section 3 in simple terms</li>
-                <li>Compare paper A and paper B</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+    
+    # Mode selector
+    st.header("🔧 Settings")
+    mode = st.selectbox(
+        "Query Mode", 
+        ["normal", "compare", "simplify"],
+        help="Normal: Standard Q&A | Compare: Cross-paper analysis | Simplify: Plain language explanations"
+    )
+    
+    # Display processed files
+    st.header("📚 Processed Papers")
+    if st.session_state.processed_files:
+        for filename in st.session_state.processed_files:
+            st.text(f"✅ {filename}")
     else:
-        # Display chat history
-        for role, message, citations in st.session_state.chat_history:
-            with st.chat_message("user" if role == "user" else "assistant"):
-                st.markdown(message)
-                if role == "assistant" and citations:
-                    st.caption("📎 Sources: " + ", ".join([f"{c['title']} (p.{c['page']})" for c in citations]))
-
-        # Dynamic placeholder based on mode
-        placeholder = {
-            "Normal Q&A": "Ask a question about your papers...",
-            "Compare Papers": "Ask how two papers differ...",
-            "Simplify Explanation": "Paste something to simplify..."
-        }[mode]
-
-        user_query = st.chat_input(placeholder)
-        if user_query:
-            # Append to history (mock citations)
-            st.session_state.chat_history.append(("user", user_query, None))
-            st.session_state.chat_history.append((
-                "assistant",
-                "_(Pending answer from model...)_",
-                [{"title": "Attention Is All You Need", "page": 3}]
-            ))
-            st.session_state.recent_questions.append(user_query)
+        st.text("No papers uploaded yet")
+    
+    # Process uploaded files
+    if uploaded_files:
+        if st.button("🚀 Process Papers", type="primary"):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for i, uploaded_file in enumerate(uploaded_files):
+                if uploaded_file.name not in st.session_state.processed_files:
+                    try:
+                        status_text.text(f"Processing {uploaded_file.name}...")
+                        
+                        # Save uploaded file temporarily
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                            tmp_file.write(uploaded_file.getvalue())
+                            tmp_path = tmp_file.name
+                        
+                        # Process file through your pipeline
+                        processed_doc = process_file(tmp_path)
+                        doc_id = st.session_state.embedding_manager.add_document(processed_doc)
+                        
+                        if doc_id:
+                            st.session_state.processed_files.append(uploaded_file.name)
+                            st.success(f"✅ Processed: {uploaded_file.name}")
+                        else:
+                            st.error(f"❌ Failed to process: {uploaded_file.name}")
+                        
+                        # Cleanup
+                        os.unlink(tmp_path)
+                        
+                    except Exception as e:
+                        st.error(f"Error processing {uploaded_file.name}: {str(e)}")
+                
+                progress_bar.progress((i + 1) / len(uploaded_files))
+            
+            status_text.text("Processing complete!")
             st.rerun()
 
-# ---------- Right Panel ----------
-with right:
-    # Paper Library
-    st.markdown("### 📑 Paper Library")
-    if st.session_state.papers:
-        for paper in st.session_state.papers:
-            with st.container():
-                st.markdown(f"""
-                <div class='paper-card'>
-                    <strong>{paper['title']}</strong><br>
-                    <small>{paper['pages']} pages</small>
-                    <p style='font-size:0.85rem; color:#555;'>{paper['abstract']}</p>
-                </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.info("No papers loaded yet.")
+# Main content area
+col1, col2 = st.columns([3, 1])
 
-    # Recent Questions
-    st.markdown("### 🕒 Recent Questions")
-    if st.session_state.recent_questions:
-        cols = st.columns(2)
-        for i, q in enumerate(reversed(st.session_state.recent_questions[-8:])):
-            with cols[i % 2]:
-                if st.button(q, key=f"recent_{i}", use_container_width=True):
-                    # Instead of auto-submit, pre-fill as next user query
-                    st.session_state.prefill = q
-                    st.rerun()
-    else:
-        st.info("Ask something to see it appear here.")
+with col1:
+    st.header("💬 Chat with Your Papers")
+    
+    # Display chat messages
+    chat_container = st.container()
+    
+    with chat_container:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                
+                # Display citations for assistant messages
+                if message["role"] == "assistant" and "citations" in message:
+                    if message["citations"]:
+                        st.markdown("**Sources:**")
+                        for source, reference in message["citations"].items():
+                            st.markdown(f"- **{source}**: {reference}")
+
+with col2:
+    st.header("📊 Query Info")
+    if st.session_state.messages:
+        last_message = st.session_state.messages[-1]
+        if last_message["role"] == "assistant" and "metadata" in last_message:
+            metadata = last_message["metadata"]
+            st.metric("Sources Found", metadata.get("sources_count", 0))
+            st.metric("Citations Used", len(metadata.get("citations_used", [])))
+            
+            confidence = metadata.get("confidence", "unknown")
+            confidence_color = {
+                "high": "🟢",
+                "medium": "🟡", 
+                "low": "🟠",
+                "error": "🔴"
+            }.get(confidence, "⚪")
+            
+            st.markdown(f"**Confidence:** {confidence_color} {confidence.title()}")
+
+# Chat input
+if st.session_state.processed_files:
+    if prompt := st.chat_input("Ask about your papers..."):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display user message immediately
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Generate assistant response
+        with st.chat_message("assistant"):
+            with st.spinner("Searching papers and generating answer..."):
+                try:
+                    result = answer_question_with_citations(prompt, mode=mode)
+                    
+                    # Display answer
+                    st.markdown(result['answer'])
+                    
+                    # Display citations if available
+                    if result['has_citations'] and result['citation_map']:
+                        st.markdown("**Sources:**")
+                        for source, reference in result['citation_map'].items():
+                            st.markdown(f"- **{source}**: {reference}")
+                    elif not result['has_citations']:
+                        st.warning("⚠️ Answer generated without citations. Consider refining your query.")
+                    
+                    # Store assistant response
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": result['answer'],
+                        "citations": result['citation_map'],
+                        "metadata": {
+                            "sources_count": result.get('sources_count', 0),
+                            "citations_used": result.get('citations_used', []),
+                            "confidence": result.get('confidence', 'unknown')
+                        }
+                    })
+                    
+                except Exception as e:
+                    error_msg = f"Error generating answer: {str(e)}"
+                    st.error(error_msg)
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": error_msg,
+                        "citations": {},
+                        "metadata": {"confidence": "error"}
+                    })
+        
+        st.rerun()
+else:
+    st.info("👆 Please upload and process some PDF files first to start asking questions!")
+
+# Footer
+st.markdown("---")
+st.markdown("**Research Paper Copilot** - AI-powered document analysis with accurate citations")
