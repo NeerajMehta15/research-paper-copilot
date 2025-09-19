@@ -3,21 +3,17 @@ from transformers import pipeline
 from backend.retrieval import retrieve_relevant_chunks
 
 class RAGPipeline:
-    def __init__(self, model_name="gpt2", max_length=512):
+    def __init__(self, model_name="google/flan-t5-small", max_length=512):
         """Initialize RAG pipeline with Hugging Face pipeline"""
         self.model_name = model_name
         self.max_length = max_length
         
-        # Initialize Hugging Face pipeline with GPT-2
+        # Initialize Hugging Face pipeline
         self.llm_pipeline = pipeline(
-            "text-generation",
-            model=model_name,
-            max_new_tokens=200,
-            do_sample=True,
-            temperature=0.7,
-            pad_token_id=50256
-        )
-    
+            "text2text-generation",
+            model_name="google/flan-t5-small", 
+            max_new_tokens=150)
+        
     def generate_answer_with_citations(self, query: str, top_k: int = 5, mode: str = "normal"):
         """Main function to generate answers with citations"""
         context_data = retrieve_relevant_chunks(query, top_k)
