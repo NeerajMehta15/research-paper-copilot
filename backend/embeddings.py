@@ -1,19 +1,24 @@
 from typing import List, Dict, Any, Optional
-import numpy as np
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
 from backend.ingest import smart_chunking
 import time 
+from backend import config
 
 class EmbeddingManager:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", db_path: str = "/Users/neeraj/Documents/Python/research-paper-copilot/data"):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", db_path: str = None):
         """Initialize embedding model and vector store"""
         self.model_name = model_name
         self.model = SentenceTransformer(model_name)
-        self.vector_store = db_path
-        self.client = chromadb.PersistentClient(path=self.vector_store)
+
+        self.vector_store = db_path or config.DB_PATH  
         
+        print("EmbeddingManager is using vector store at:", self.vector_store)
+
+
+        self.client = chromadb.PersistentClient(path=self.vector_store)
+
         self.collection = self.client.get_or_create_collection(
             name="ai_research_paper",
             metadata={"description": "AI White paper documents"}

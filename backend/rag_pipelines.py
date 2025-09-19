@@ -3,19 +3,19 @@ from transformers import pipeline
 from backend.retrieval import retrieve_relevant_chunks
 
 class RAGPipeline:
-    def __init__(self, model_name="microsoft/DialoGPT-medium", max_length=512):
+    def __init__(self, model_name="gpt2", max_length=512):
         """Initialize RAG pipeline with Hugging Face pipeline"""
         self.model_name = model_name
         self.max_length = max_length
         
-        # Initialize Hugging Face pipeline directly
+        # Initialize Hugging Face pipeline with GPT-2
         self.llm_pipeline = pipeline(
             "text-generation",
             model=model_name,
-            tokenizer=model_name,
-            max_length=max_length,
+            max_new_tokens=200,
             do_sample=True,
-            temperature=0.1
+            temperature=0.7,
+            pad_token_id=50256
         )
     
     def generate_answer_with_citations(self, query: str, top_k: int = 5, mode: str = "normal"):
@@ -66,17 +66,28 @@ class RAGPipeline:
         
     def _call_llm(self, prompt: str) -> str:
         """Make API call using Hugging Face pipeline"""
+        print("=== DEBUG: Starting LLM call ===")
+        print(f"Prompt length: {len(prompt)}")
+        print(f"First 200 chars of prompt: {prompt[:200]}")
+        
         try:
-            # Generate response using the pipeline
+            print("Calling pipeline...")
             response = self.llm_pipeline(prompt)
+            print(f"Pipeline response type: {type(response)}")
+            print(f"Response: {response}")
             
-            # Extract generated text
+            # Extract generated text (remove the input prompt)
             generated_text = response[0]['generated_text']
+            print(f"Generated text length: {len(generated_text)}")
+            
             answer = generated_text[len(prompt):].strip()
+            print(f"Extracted answer: '{answer}'")
             
             return answer
         except Exception as e:
             print(f"Error calling LLM: {e}")
+            import traceback
+            traceback.print_exc()
             return "Error generating response"
     
     def _process_llm_response(self, raw_response: str, context_data: Dict) -> Dict:
