@@ -3,6 +3,13 @@ from backend.embeddings import EmbeddingManager
 def retrieve_relevant_chunks(query, top_k=5):
     # Create EmbeddingManager instance
     embedding_manager = EmbeddingManager()
+
+    #Checking if embeddings are available
+    try:
+        all_docs = embedding_manager.collection.get()
+        print(f"Total documents in collection: {len(all_docs['documents'])}")
+    except:
+        print("Error accessing collection")
     
     # Get search results (this returns a list of dictionaries)
     search_results = embedding_manager.search_similar(query, top_k)

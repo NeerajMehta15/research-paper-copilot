@@ -87,7 +87,7 @@ class EmbeddingManager:
             print(f"Error adding document: {e}")
             return None
     
-    def search_similar(self, query: str, top_k: int = 5, filters: Optional[Dict] = None, min_similarity: float = 0.5):
+    def search_similar(self, query: str, top_k: int = 5, filters: Optional[Dict] = None, min_similarity: float = 0.1):
         """Search for similar chunks"""
         try:
             # Generate query embedding
